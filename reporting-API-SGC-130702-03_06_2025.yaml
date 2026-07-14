@@ -1,0 +1,909 @@
+openapi: 3.0.0
+info:
+  title: Reporting API
+  description: The Verifone Reporting API is built as a RESTful interface and provides the ability to list and download reports
+  termsOfService: https://www.verifone.com/en/us/legal
+  contact:
+    url: https://developer.verifone.com
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: 1.3.1
+servers:
+  - url: https://emea.gsc.verifone.cloud/oidc/report-engine/api/v1
+    description: EMEA Production
+  - url: https://us.gsc.verifone.cloud/oidc/report-engine/api/v1
+    description: Americas Production
+  - url: https://au.gsc.verifone.cloud/oidc/report-engine/api/v1
+    description: Australia Production
+  - url: https://nz.gsc.verifone.cloud/oidc/report-engine/api/v1
+    description: New Zealand Production
+  - url: https://cst.test-gsc.vfims.com/oidc/report-engine/api/v1
+    description: Global Sandbox
+  - url: https://uscst-gb.gsc.vficloud.net/oidc/report-engine/api/v1
+    description: Americas Sandbox
+security:
+  - bearerAuth: []
+  - ApiKeyAuth: []
+paths:
+  /reports/{reportUid}:
+    get:
+      tags:
+        - Reports
+      summary: Download specific report
+      description: Download specific report.
+      operationId: downloadReport
+      parameters:
+        - name: reportUid
+          in: path
+          required: true
+          style: simple
+          explode: false
+          schema:
+            $ref: "#/components/schemas/ReportUid"
+      responses:
+        "200":
+          description: Search results matching the criteria.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            text/csv:
+              schema:
+                type: string
+                format: binary
+            text/plain:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Bad Request. Unable to interpret the request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/genericError400"
+        "401":
+          description: Unauthorized. Unable to authenticate client to allow request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/genericError401"
+        "403":
+          description: Forbidden. This Feature is not enabled. This feature has not been authorised for the client.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/genericError403"
+        "404":
+          description: Not found. The requested resource does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/genericError404"
+        "429":
+          description: Too many requests. Too many requests from the client hit the API.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/genericError429"
+        "500":
+          description: Internal error. There was an error processing the request; try again later.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/genericError500"
+        "503":
+          description: Service Unavailable. Unable process requests at this time, please try again later.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/genericError503"
+        "504":
+          description: Service Unavailable. Unable process requests at this time, please try again later.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/genericError504"
+  /reports:
+    get:
+      tags:
+        - Reports
+      summary: Get the list of all reports
+      description: By passing in the appropriate options, you can search for reports in the system.
+      operationId: searchReports
+      parameters:
+        - name: pageNumber
+          in: query
+          description: Page number for records.
+          required: false
+          style: form
+          explode: true
+          schema:
+            minimum: 1
+            type: integer
+            example: 1
+            default: 1
+        - name: pageSize
+          in: query
+          description: Page size for returned records.
+          required: false
+          style: form
+          explode: true
+          schema:
+            maximum: 1000
+            minimum: 1
+            type: integer
+            example: 50
+            default: 50
+        - name: orderBy
+          in: query
+          description: |-
+            The ordering sequence of the selected records.
+            If this parameter is not provided, descending order will be chosen.
+
+            |Value|Description|
+            |--------|-----------|
+            |ASC|Ascending order|
+            |DESC| Descending order|
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+        - name: orderCriteria
+          in: query
+          description: |-
+            The ordering criteria of the selected records.
+
+            If this parameter not provided, the result will be ordered by <b>createdOn</b>.
+
+            |Value|Description|
+            |--------|-----------|
+            |createdOn|Date & Time|
+            |modifiedOn| Date & Time|
+            |status| Report status|
+            |mimeType| Mime type|
+            |reportType| Report type|
+            |reportUid| Report identifier|
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+        - name: search
+          in: query
+          description: |-
+            <b>A filter query in RSQL format.</b>
+
+            The returned reports are limited to those that can be retrieved by the user. Please note that if
+            `reportEntityUid` is not provided as a search criteria, only records will be returned for the current
+            `reportEntityUid` assigend to that user (and does not include descendants).
+
+            |Criteria|Description|Operator Used|
+            |--------|-----------|-----------|
+            |createdOn|The date and time the report was created (Date & Time)|==,=lt=,=le=,=gt=,=ge=,=in=,=out=|
+            |modifiedOn|Date & Time|==,=lt=,=le=,=gt=,=ge=,=in=,=out=|
+            |status|Report status|==,=in=,=out=|
+            |mimeType|Mime type|==,=in=,=out=|
+            |reportType|Report type|==,=in=,=out=|
+            |reportUid|Report identifier|==,=regex=,=in=,=out=|
+            |reportEntityUid|Report entity UUID|==,=in=|
+            |reportParameter.batchUUID|The unique identifier of the settlement batch this report is related to. Mapped to PDSP's `transaction.context.paymentContext.batchUUID`.|==,=in=|
+            |reportParameter.settlementBatchFileNumber|The identifier of the settlement batch file this report is related to. Mapped to PDSP's `transaction.settlementContext.settlementBatchFileNumber`.|==,=regex=,=in=,=out=|
+            |reportParameter.clearingEntityUid|Clearing entity UUID|==,=in=|
+            |reportParameter.clearingAccountUid|clearingAccountUid|==,=in=|
+            |reportParameter.clearingDate|clearingDate (Date & Time)|==,=lt=,=le=,=gt=,=ge=,=in=,=out=|
+            |reportParameter.clearingMerchantName|clearingMerchantName|==,=regex=,=in=,=out=|
+            |reportParameter.clearingUid|clearingUid|==,=in=|
+            |reportParameter.clearingBankAccount|clearingBankAccount|==,=in=|
+            |reportParameter.bankingPartner|bankingPartner|==,=regex=,=in=,=out=|
+            |reportParameter.clearingBankCode|clearingBankCode|==,=regex=,=in=,=out=|
+            |reportParameter.clearingMerchantId|clearingMerchantId|==,=regex=,=in=,=out=|
+            |reportParameter.clearingReference|clearingReference|==,=regex=,=in=,=out=|
+            |reportParameter.generatedOn (deprecated)|generatedOn|==,=lt=,=le=,=gt=,=ge=,=in=,=out=|
+            |reportParameter.invoicePeriodFrom|invoicePeriodFrom|==,=lt=,=le=,=gt=,=ge=,=in=,=out=|
+            |reportParameter.invoicePeriodTo|invoicePeriodTo|==,=lt=,=le=,=gt=,=ge=,=in=,=out=|
+            |reportParameter.invoiceNumber|invoiceNumber|==,=regex=,=in=,=out=|
+            |reportParameter.reportDescription|reportDescription|==,=regex=,=in=,=out=|
+            |reportParameter.reportableDay|reportableDay|==,=lt=,=le=,=gt=,=ge=,=in=,=out=|
+
+            <b>RSQL Operators</b>
+            RSQL Query is composed of one or more expressions, combined to each other with following logical operators:
+
+            |Operator|Syntax|
+            |--------|------|
+            |Logical AND|<b>;</b> or <b>&</b>|
+            |Logical OR|<b>,</b>|
+
+
+            <b>RSQL Comparators</b>
+
+            |Comparator|Description|
+            |--------|-----------|
+            |==|equal|
+            |!=|not equal|
+            |=lt=|less than|
+            |=le=|less than and equal to|
+            |=gt=|greater than|
+            |=ge=|greater than and equal to |
+            |=regex=|pattern matching|
+            |=in=|multiple arguments search|
+            |=out=|exclude|
+
+
+            <b>Examples</b>
+
+            * /reports?search=reportType=in=(MERCHANT_SETTLEMENT_REPORT,DAILY_TRANSACTION_REPORT);createdOn=gt=2020-09-20T00:00:00.000Z
+
+            * /reports?search=reportEntityUid=in=(2cbc7ec7-49dd-4e70-be98-dd751cf8640b,0d7e19f7-94d5-49ad-890d-1ce636912fb7,a3ca2522-2810-4db1-b535-6e449c3cea6c)
+
+            * /reports?search=reportParameter.clearingReference==12345
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: search results matching criteria
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportsResponse"
+        "400":
+          description: Bad Request. Unable to interpret the request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/genericError400"
+        "401":
+          description: Unauthorized. Unable to authenticate client to allow request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/genericError401"
+        "403":
+          description: Forbidden. This Feature is not enabled. This feature has not been authorised for the client.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/genericError403"
+        "404":
+          description: Not found. The requested resource does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/genericError404"
+        "429":
+          description: Too many requests. Too many requests from the client hit the API.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/genericError429"
+        "500":
+          description: Internal error. There was an error processing the request; try again later.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/genericError500"
+        "503":
+          description: Service Unavailable. Unable process requests at this time, please try again later.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/genericError503"
+        "504":
+          description: Service Unavailable. Unable process requests at this time, please try again later.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/genericError504"
+components:
+  schemas:
+    ReportUid:
+      title: Report UID
+      type: string
+      description: The unique identifier of that specific report.
+      format: uuid
+      example: 04f5ea24-cc4f-11e8-a8d5-f2801f1b9fd1
+    genericError400:
+      title: HTTP 400 Error
+      required:
+        - code
+        - message
+        - title
+        - type
+      type: object
+      properties:
+        code:
+          type: string
+          example: "400"
+          enum:
+            - "400"
+          default: "400"
+        title:
+          type: string
+          example: Bad Request
+          enum:
+            - Bad Request
+          default: Bad Request
+        message:
+          type: string
+          example: The request could not be understood by the server due to malformed syntax. The client SHOULD NOT repeat the request without modifications.
+          default: The request could not be understood by the server due to malformed syntax. The client SHOULD NOT repeat the request without modifications.
+        timestamp:
+          type: string
+          description: |-
+            The time that the error occurred. All dates in the JSON payloads are represented in ISO 8601 date-time format. 
+            All date-time fields in responses must include the timezone.
+          format: date-time
+          example: "2017-04-05T10:43:07Z"
+        type:
+          type: string
+          example: INVALID_REQUEST_ERROR
+          enum:
+            - INVALID_REQUEST_ERROR
+          default: INVALID_REQUEST_ERROR
+        param:
+          type: string
+          description: The parameter the error relates to if the error is parameter-specific. You can use this to display a message near the correct form field, for example.
+      description: The request could not be understood by the server due to malformed syntax.
+    genericError401:
+      title: HTTP 401 Error
+      required:
+        - code
+        - message
+        - title
+        - type
+      type: object
+      properties:
+        code:
+          type: string
+          example: "401"
+          enum:
+            - "401"
+          default: "401"
+        title:
+          type: string
+          example: Unauthorised
+          enum:
+            - Unauthorised
+          default: Unauthorised
+        message:
+          type: string
+          example: The request requires client authentication.
+          default: The request requires client authentication.
+        timestamp:
+          type: string
+          description: |-
+            The time that the error occurred. All dates in the JSON payloads are represented in ISO 8601 date-time format. 
+            All date-time fields in responses must include the timezone.
+          format: date-time
+          example: "2017-04-05T10:43:07Z"
+        type:
+          type: string
+          example: AUTHENTICATION_ERROR
+          enum:
+            - AUTHENTICATION_ERROR
+          default: AUTHENTICATION_ERROR
+        param:
+          type: string
+          description: The parameter the error relates to if the error is parameter-specific. You can use this to display a message near the correct form field, for example.
+      description: The request must be authenticated to access the resource.
+    genericError403:
+      title: HTTP 403 Error
+      required:
+        - code
+        - message
+        - title
+        - type
+      type: object
+      properties:
+        code:
+          type: string
+          example: "403"
+          enum:
+            - "403"
+          default: "403"
+        title:
+          type: string
+          example: Forbidden
+          enum:
+            - Forbidden
+          default: Forbidden
+        message:
+          type: string
+          example: The request requires client authorisation to access resource.
+          default: The request requires client authorisation to access resource.
+        timestamp:
+          type: string
+          description: |-
+            The time that the error occurred. All dates in the JSON payloads are represented in ISO 8601 date-time format. 
+            All date-time fields in responses must include the timezone.
+          format: date-time
+          example: "2017-04-05T10:43:07Z"
+        type:
+          type: string
+          example: AUTHENTICATION_ERROR
+          enum:
+            - AUTHENTICATION_ERROR
+          default: AUTHENTICATION_ERROR
+        param:
+          type: string
+          description: The parameter the error relates to if the error is parameter-specific. You can use this to display a message near the correct form field, for example.
+      description: The request must be authorised to access the resource.
+    genericError404:
+      title: HTTP 404 Error
+      required:
+        - code
+        - message
+        - title
+        - type
+      type: object
+      properties:
+        code:
+          type: string
+          example: "404"
+          enum:
+            - "404"
+          default: "404"
+        title:
+          type: string
+          example: Not Found
+          enum:
+            - Not Found
+          default: Not Found
+        message:
+          type: string
+          example: The server cannot find the requested resource.
+          default: The server cannot find the requested resource.
+        timestamp:
+          type: string
+          description: |-
+            The time that the error occurred. All dates in the JSON payloads are represented in ISO 8601 date-time format. 
+            All date-time fields in responses must include the timezone.
+          format: date-time
+          example: "2017-04-05T10:43:07Z"
+        type:
+          type: string
+          example: INVALID_REQUEST_ERROR
+          enum:
+            - INVALID_REQUEST_ERROR
+          default: INVALID_REQUEST_ERROR
+        param:
+          type: string
+          description: The parameter the error relates to if the error is parameter-specific. You can use this to display a message near the correct form field, for example.
+      description: The server cannot find the requested resource.
+    genericError429:
+      title: HTTP 429 Error
+      required:
+        - code
+        - message
+        - title
+        - type
+      type: object
+      properties:
+        code:
+          type: string
+          example: "429"
+          enum:
+            - "429"
+          default: "429"
+        title:
+          type: string
+          example: Too Many Requests
+          enum:
+            - Too Many Requests
+          default: Too Many Requests
+        message:
+          type: string
+          example: The number of requests from this client is restricted to a specified quota.
+          default: The number of requests from this client is restricted to a specified quota.
+        timestamp:
+          type: string
+          description: |-
+            The time that the error occurred. All dates in the JSON payloads are represented in ISO 8601 date-time format. 
+            All date-time fields in responses must include the timezone.
+          format: date-time
+          example: "2017-04-05T10:43:07Z"
+        type:
+          type: string
+          example: RATE_LIMIT_ERROR
+          enum:
+            - RATE_LIMIT_ERROR
+          default: RATE_LIMIT_ERROR
+        param:
+          type: string
+          description: The parameter the error relates to if the error is parameter-specific. You can use this to display a message near the correct form field, for example.
+      description: The resource exists the number of requests has exceeded the specified quota.
+    genericError500:
+      title: HTTP 500 Error
+      required:
+        - code
+        - message
+        - title
+        - type
+      type: object
+      properties:
+        code:
+          type: string
+          example: "500"
+          enum:
+            - "500"
+          default: "500"
+        title:
+          type: string
+          example: Internal Server Error
+          enum:
+            - Internal Server Error
+          default: Internal Server Error
+        message:
+          type: string
+          example: The server encountered an unexpected condition which prevented it from fulfilling the request.
+          default: The server encountered an unexpected condition which prevented it from fulfilling the request.
+        timestamp:
+          type: string
+          description: |-
+            The time that the error occurred. All dates in the JSON payloads are represented in ISO 8601 date-time format. 
+            All date-time fields in responses must include the timezone.
+          format: date-time
+          example: "2017-04-05T10:43:07Z"
+        type:
+          type: string
+          example: API_ERROR
+          enum:
+            - API_ERROR
+          default: API_ERROR
+        param:
+          type: string
+          description: The parameter the error relates to if the error is parameter-specific. You can use this to display a message near the correct form field, for example.
+      description: Unexpected Server Error
+    genericError503:
+      title: HTTP 503 Error
+      required:
+        - code
+        - message
+        - title
+        - type
+      type: object
+      properties:
+        code:
+          type: string
+          example: "503"
+          enum:
+            - "503"
+          default: "503"
+        title:
+          type: string
+          example: Service Unavailable
+          enum:
+            - Service Unavailable
+          default: Service Unavailable
+        message:
+          type: string
+          example: The server is not ready to handle the request. If specified please check the <strong>Retry-After</strong> for the time period specified for recovery/re-attempt of request.
+          default: The server is not ready to handle the request. If specified please check the <strong>Retry-After</strong> for the time period specified for recovery/re-attempt of request.
+        timestamp:
+          type: string
+          description: |-
+            The time that the error occurred. All dates in the JSON payloads are represented in ISO 8601 date-time format. 
+            All date-time fields in responses must include the timezone.
+          format: date-time
+          example: "2017-04-05T10:43:07Z"
+        type:
+          type: string
+          example: API_ERROR
+          enum:
+            - API_ERROR
+          default: API_ERROR
+        param:
+          type: string
+          description: The parameter the error relates to if the error is parameter-specific. You can use this to display a message near the correct form field, for example.
+      description: Service Unavailable Error
+    genericError504:
+      title: HTTP 504 Error
+      required:
+        - code
+        - message
+        - title
+        - type
+      type: object
+      properties:
+        code:
+          type: string
+          example: "504"
+          enum:
+            - "504"
+          default: "504"
+        title:
+          type: string
+          example: Gateway Timeout
+          enum:
+            - Gateway Timeout
+          default: Gateway Timeout
+        message:
+          type: string
+          example: The server, while acting as a gateway or proxy, did not get a response in time from the upstream server that it needed in order to complete the request.
+          default: The server, while acting as a gateway or proxy, did not get a response in time from the upstream server that it needed in order to complete the request.
+        timestamp:
+          type: string
+          description: |-
+            The time that the error occurred. All dates in the JSON payloads are represented in ISO 8601 date-time format. 
+            All date-time fields in responses must include the timezone.
+          format: date-time
+          example: "2017-04-05T10:43:07Z"
+        type:
+          type: string
+          example: API_ERROR
+          enum:
+            - API_ERROR
+          default: API_ERROR
+        param:
+          type: string
+          description: The parameter the error relates to if the error is parameter-specific. You can use this to display a message near the correct form field, for example.
+      description: Gateway Timeout Error
+    ReportsResponse:
+      type: object
+      properties:
+        totals:
+          type: integer
+          description: Total number of reports. The total number of reports matching the search criteria, which can be larger than the number of elements in the array "reports" (which is upper bound by the "pageSize" parameter from the query request).
+        reports:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportRecord"
+    ReportRecord:
+      allOf:
+        - $ref: "#/components/schemas/Report"
+        - type: object
+          properties:
+            reportUid:
+              $ref: "#/components/schemas/ReportUid"
+            createdOn:
+              type: string
+              description: The date and time the report was created.
+              format: date-time
+            modifiedOn:
+              type: string
+              description: The date and time the report was last modified.
+              format: date-time
+            status:
+              $ref: "#/components/schemas/ReportStatusEnum"
+    Report:
+      title: Base report details
+      required:
+        - fileName
+        - mimeType
+        - reportEntityUid
+        - reportType
+      type: object
+      properties:
+        reportType:
+          $ref: "#/components/schemas/ReportTypeEnum"
+        reportParameter:
+          $ref: "#/components/schemas/ReportParameters"
+        mimeType:
+          $ref: "#/components/schemas/MimeType"
+        reportEntityUid:
+          type: string
+          description: The internally assigned identifier for the entity for which the report was generated.
+          format: uuid
+          example: 03f2dc18-ac4f-11e8-a8d5-d7341f1b9fc3
+        fileName:
+          type: string
+          description: |-
+            The filename of the report including extenstion (e.g. myfile.txt).
+            Please note that the file extenstion is validated based on the mimeType indicated in the request and
+            that the reportUid is concatenated to the filename (format: filename_reportUid.ext, e.g. myfile_cb941e2d-f446-413a-8c2b-28e26eb048fc.txt)
+    TemplateDetails:
+      required:
+        - templateType
+      type: object
+      properties:
+        templateType:
+          type: string
+          enum:
+            - STANDARD
+            - CUSTOM
+      discriminator:
+        propertyName: templateType
+        mapping:
+          STANDARD: "#/components/schemas/TemplateDetailsVerifone"
+          CUSTOM: "#/components/schemas/TemplateDetailsCustom"
+    templateUid:
+      type: string
+      description: The unique id for the template
+      format: uuid
+    ReportStatusEnum:
+      title: Report status enumeration
+      type: string
+      description: The status of the report will be in one of the following states.
+      enum:
+        - INITIATED
+        - INVALID_INPUT_PARAMETERS
+        - PROCESSING_STARTED
+        - FAILED
+        - SUCCESSFUL
+    ReportTypeEnum:
+      title: Report type enumeration
+      type: string
+      description: |-
+        The type of the report.
+
+        |Value|Description|
+        |--------|-----------|
+        |ABS_SETTLEMENT_RESPONSE_REPORT|ABS settlement report (generated and returned by ABS during settlement as a ready-made file report)|
+        |BBX_PARTNER_COMMISSION_REPORT|BBX commission report (generated by BBX as a ready-made file report)|
+        |INTERCARD_COMMISSION_REPORT|InterCard commission report (generated by InterCard as a ready-made file report)|
+        |DAILY_TRANSACTION_REPORT|The daily transactions report is generated for each payout to the clearing entity (which e.g. can be either a store, a merchant or even a franchisee level). The content therefore depends on the particular setup. <br/>Please see https://verifone.cloud/docs/in-store-payments/merchant-payout-reports#daily-transactions-report|
+        |INTERCARD_INVOICE|InterCard invoice (generated by InterCard as a ready-made file report)|
+        |MERCHANT_SETTLEMENT_REPORT|The merchant settlement report contains a total summary (TS) and summary (S) records for all payment types which contributed to a single payout to the merchant. <br/>Please see https://verifone.cloud/docs/in-store-payments/merchant-payout-reports#merchant-settlement-report|
+      enum:
+        - ABS_SETTLEMENT_RESPONSE_REPORT
+        - BBX_PARTNER_COMMISSION_REPORT
+        - DAILY_TRANSACTION_REPORT
+        - CUSTOM_PDSP_REPORT
+        - INTERCARD_COMMISSION_REPORT
+        - INTERCARD_INVOICE
+        - MERCHANT_SETTLEMENT_REPORT
+    ReportParameters:
+      title: Report Parameters
+      type: object
+      properties:
+        batchUUID:
+          type: string
+          description: The unique identifier of the settlement batch this report is related to. Mapped to PDSP's `transaction.context.paymentContext.batchUUID`.
+          format: uuid
+          example: 04f5ea24-cc4f-11e8-a8d5-f2801f1b9fd1
+        settlementBatchFileNumber:
+          type: string
+          description: The identifier of the settlement batch file this report is related to. Mapped to PDSP's `transaction.settlementContext.settlementBatchFileNumber`.
+        correlationId:
+          type: string
+          description: Correlation ID.
+          format: uuid
+        clearingEntityUid:
+          type: string
+          description: Clearing Entity UUID.
+          format: uuid
+        clearingAccountUid:
+          type: string
+          description: Clearing Account UUID.
+          format: uuid
+        clearingDate:
+          type: string
+          description: Date & Time.
+          format: date-time
+        clearingMerchantName:
+          type: string
+          description: Clearing merchant name.
+        clearingUid:
+          type: string
+          description: The clearing UUID.
+          format: uuid
+        clearingBankAccount:
+          type: string
+          description: The clearing bank account.
+        bankingPartner:
+          $ref: "#/components/schemas/BankingPartner"
+        clearingBankCode:
+          type: string
+          description: The clearing bank code.
+        clearingMerchantId:
+          type: string
+          description: The clearing merchant ID.
+        clearingReference:
+          type: string
+          description: The clearing reference.
+        generatedOn:
+          type: string
+          description: The timestamp when the original report was created.
+          format: date-time
+          deprecated: true
+        invoicePeriodFrom:
+          type: string
+          description: The start date of the invoicing period.
+          format: date
+        invoicePeriodTo:
+          type: string
+          description: The end date of the invoicing period.
+          format: date
+        invoiceNumber:
+          type: string
+          description: Invoice number.
+        reportDescription:
+          type: string
+          description: Description of the report.
+        reportableDay:
+          type: string
+          description: The date the report was generated for.
+          format: date
+      description: List of parameters which were basis for the generation of this report.
+    MimeType:
+      type: string
+      description: The MIME type of this report.
+      enum:
+        - application/pdf
+        - text/csv
+        - text/plain
+    TemplateDetailsVerifone:
+      required:
+        - template
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/TemplateDetails"
+        - type: object
+          properties:
+            template:
+              type: string
+              description: |
+                |Template|Description|
+                |--------|-----------|
+                |SIMPLIFIED_TRANSACTIONS_GROUPED|Basic transaction export. Transactions are grouped into orders.|
+                |DETAILED_TRANSACTIONS_GROUPED|Detailed transaction export. Transactions are grouped into orders.|
+              enum:
+                - SIMPLIFIED_TRANSACTIONS_GROUPED
+                - DETAILED_TRANSACTIONS_GROUPED
+    TemplateDetailsCustom:
+      required:
+        - templateUid
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/TemplateDetails"
+        - type: object
+          properties:
+            templateUid:
+              $ref: "#/components/schemas/templateUid"
+    BankingPartner:
+      title: Banking partner
+      type: string
+      description: The name of the banking partners.
+      enum:
+        - DESJARDINS
+        - IBC
+        - INTERCARD
+  responses: {}
+  securitySchemes:
+    bearerAuth:
+      type: http
+      description: |-
+        Bearer Authentication scheme.
+
+        To use this authentication method indicate <code>Authorization: Bearer &lt;JWT&gt;</code> in the header.
+
+        Please replace the value of &lt;JWT&gt; with the JWT generated for that user.
+
+        <strong>Example</strong>
+
+        <code>Authorization: Bearer eyJ0eX...</code>
+        (please note that for security reasons the JWT in this example is limited to 6 characters)
+      scheme: bearer
+      bearerFormat: JWT
+    ApiKeyAuth:
+      type: http
+      description: |-
+        API Key Authentication scheme.
+
+        To use this authentication method indicate <code>Authorization: Basic &lt;UserUUID:APIKEY></code> in the header.
+
+        Please replace the value of &lt;UserUUID&gt; with the internal Verifone user ID for that user and &lt;APIKEY&gt; with the apikey issued for that user and encode the whole string in base64.
+
+        <strong>Example</strong>
+
+        <code>f8811dd2-3667-4a1e-be8b-b42b63743254:ABCheDEFBXUGHIDmVPPPFOLtLoEnWYJVHdZF</code>
+        results in a base64 string of <code>Zjg4MTFkZDItMzY2Ny00YTFlLWJlOGItYjQyYjYzNzQzMjU0OkFCQ2hlREVGQlhVR0hJRG1WUFBQRk9MdExvRW5XWUpWSGRaRg==</code>
+
+        This results in the following string to be used in the header:
+        <code>Authorization: Basic Zjg4MTFkZDItMzY2Ny00YTFlLWJlOGItYjQyYjYzNzQzMjU0OkFCQ2hlREVGQlhVR0hJRG1WUFBQRk9MdExvRW5XWUpWSGRaRg==</code>,
+      scheme: basic
+x-tagGroups:
+  - name: Reports
+    tags:
+      - Reports
+      - Transaction Reports
+      - Transaction Report Templates
+  - name: Internal
+    tags:
+      - Internal
+      - SFTP Connections

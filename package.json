@@ -10,6 +10,7 @@
     "build": "vite build",
     "sync": "bun sync.ts",
     "sync:instagram": "bun instagram_sync.ts",
+    "sync:weather": "bun weather_sync.ts",
     "test": "bun test"
   },
   "dependencies": {

@@ -40,6 +40,20 @@ function getDb() {
       value TEXT NOT NULL
     )
   `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS weather_daily (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      date            TEXT NOT NULL UNIQUE,
+      temp_high       REAL,
+      temp_low        REAL,
+      temp_avg        REAL,
+      rainfall_mm     REAL,
+      location_name   TEXT,
+      latitude        REAL,
+      longitude       REAL,
+      fetched_at      TEXT DEFAULT (datetime('now'))
+    )
+  `);
   return db;
 }
 

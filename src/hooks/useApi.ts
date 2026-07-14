@@ -233,3 +233,41 @@ export function useContentTypeROI() {
     staleTime: 5 * 60_000,
   });
 }
+
+// --- Weather Types ---
+
+export interface WeatherDailyRow {
+  date: string;
+  temp_high: number | null;
+  temp_low: number | null;
+  temp_avg: number | null;
+  rainfall_mm: number | null;
+}
+
+export interface WeatherCorrelationRow {
+  date: string;
+  revenue: number;
+  txn_count: number;
+  temp_avg: number | null;
+  temp_high: number | null;
+  temp_low: number | null;
+  rainfall_mm: number | null;
+}
+
+// --- Weather Hooks ---
+
+export function useWeatherDaily(days = 30) {
+  return useQuery<WeatherDailyRow[]>({
+    queryKey: ['weather-daily', days],
+    queryFn: () => fetchJson(`${BASE}/weather/daily?days=${days}`),
+    staleTime: 30 * 60_000,
+  });
+}
+
+export function useWeatherCorrelation(days = 30) {
+  return useQuery<WeatherCorrelationRow[]>({
+    queryKey: ['weather-correlation', days],
+    queryFn: () => fetchJson(`${BASE}/weather/correlation?days=${days}`),
+    staleTime: 5 * 60_000,
+  });
+}

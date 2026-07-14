@@ -10,6 +10,8 @@ import { InstagramMediaGrid } from '@/components/InstagramMediaGrid';
 import { InstagramCorrelationChart } from '@/components/InstagramCorrelationChart';
 import { InstagramPostImpact } from '@/components/InstagramPostImpact';
 import { InstagramContentROI } from '@/components/InstagramContentROI';
+import { WeatherCorrelationChart } from '@/components/WeatherCorrelationChart';
+import { WeatherStatsCard } from '@/components/WeatherStatsCard';
 import { formatDate } from '@/lib/utils';
 import { useSummary } from '@/hooks/useApi';
 
@@ -122,8 +124,10 @@ export default function App() {
         {tab === 'transactions' && (
           <div className="space-y-6">
             <StatsCards />
+            <WeatherStatsCard />
             <RevenueChart />
             <DailyTrend />
+            <WeatherCorrelationChart />
           </div>
         )}
 

@@ -2,14 +2,7 @@
 import { Database } from "bun:sqlite";
 import { runWeatherSync, type WeatherConfig } from "./lib/weather_sync.ts";
 
-const API_KEY = process.env.METSERVICE_API_KEY;
-if (!API_KEY) {
-  console.error("❌ METSERVICE_API_KEY must be set in .env");
-  process.exit(1);
-}
-
 const config: WeatherConfig = {
-  apiKey: API_KEY,
   latitude: parseFloat(process.env.WEATHER_LAT ?? "-36.8485"),
   longitude: parseFloat(process.env.WEATHER_LON ?? "174.7633"),
   locationName: process.env.WEATHER_LOCATION ?? "Auckland CBD",

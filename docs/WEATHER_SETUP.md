@@ -11,38 +11,27 @@ The dashboard now includes:
 - A **Weather vs Revenue** chart (temp + rain overlaid on daily sales) on the Sales tab
 - A **Today's Weather** card showing current temperature range and rainfall
 
-## Data Source
+## Data Source: Open-Meteo (free, no API key required)
 
-### Primary: MetService NZ API
+The sync script uses the [Open-Meteo Archive API](https://open-meteo.com/en/docs/historical-weather-api) — a free, no-key-required service:
 
-The sync script first tries [MetService](https://www.metservice.com/)'s API, which requires an API key:
+| Metric | Source field | Unit |
+|--------|-------------|------|
+| High temp | `temperature_2m_max` | °C |
+| Low temp | `temperature_2m_min` | °C |
+| Avg temp | `temperature_2m_mean` | °C |
+| Rainfall | `precipitation_sum` | mm |
 
-```bash
-METSERVICE_API_KEY=your_key_here
-```
+Timezone is `Pacific/Auckland`. Data is refreshed daily.
 
-> **Note:** The exact API endpoint path depends on MetService's developer portal. If unavailable, see the **Sources** section below.
-
-### Fallback: Open-Meteo (free, no key required)
-
-If the MetService endpoint is unreachable or returns a 404/5xx error, the script automatically falls back to [Open-Meteo's Archive API](https://open-meteo.com/en/docs/historical-weather-api) — a free, no-key-required service providing historical weather data:
-
-- Temperature (max, min, mean) in °C
-- Precipitation sum in mm
-- Daily granularity
-- Pacific/Auckland timezone
-
-**This means the feature works without any API key.** MetService is attempted first; Open-Meteo is the silent fallback.
+> **No signup, no API key, no rate limiting.** Just Bun and an internet connection.
 
 ## Running the Sync
 
 ### First sync (backfill from Jan 2025)
 
 ```bash
-# Option A: With MetService key set
-METSERVICE_API_KEY=your_key bun run sync:weather
-
-# Option B: No key — falls back to Open-Meteo automatically
+cd /home/ryan/Code/beargelato-transactions
 bun run sync:weather
 ```
 
@@ -67,19 +56,12 @@ Add a cron job to sync daily weather automatically:
 0 7 * * * cd /home/ryan/Code/beargelato-transactions && /home/ryan/.bun/bin/bun run sync:weather >> /tmp/weather-sync.log 2>&1
 ```
 
-Or use Hermes' cron system:
-
-```bash
-cronjob action=create schedule="0 7 * * *" prompt="Run weather sync for Bear Gelato" workdir=/home/ryan/Code/beargelato-transactions
-```
-
 ## Configuration
 
 All settings are in `.env`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `METSERVICE_API_KEY` | — | MetService API key (optional, falls back to Open-Meteo) |
 | `WEATHER_LAT` | `-36.8485` | Shop latitude (Auckland CBD default) |
 | `WEATHER_LON` | `174.7633` | Shop longitude (Auckland CBD default) |
 | `WEATHER_LOCATION` | `Auckland CBD` | Display name for location |

@@ -16,7 +16,6 @@ export type WeatherDaily = {
 };
 
 export type WeatherConfig = {
-  apiKey: string;
   latitude: number;
   longitude: number;
   locationName: string;
@@ -47,32 +46,18 @@ export function createWeatherSchema(db: Database): void {
 }
 
 // ---------------------------------------------------------------------------
-// API helpers
+// Open-Meteo API client
 // ---------------------------------------------------------------------------
 
-function buildHeaders(config: WeatherConfig): Record<string, string> {
-  return {
-    Authorization: `Bearer ${config.apiKey}`,
-    Accept: "application/json",
-  };
-}
-
-// ---------------------------------------------------------------------------
-// MetService NZ API client
-// ---------------------------------------------------------------------------
+const OPEN_METEO_BASE = "https://archive-api.open-meteo.com/v1/archive";
 
 /**
- * Fetch daily weather observations from MetService NZ API.
+ * Fetch daily weather observations from Open-Meteo Archive API.
  *
- * Endpoint (TBC — depends on MetService developer portal):
- *   GET /v1/climate/daily?lat={lat}&lon={lon}&from={date}&to={date}
+ * Free, no API key required. Returns temperature (max/min/mean) and
+ * precipitation for the given date range in Pacific/Auckland timezone.
  *
- * Falls back to Open-Meteo (no API key needed) if MetService is unavailable:
- *   https://archive-api.open-meteo.com/v1/archive
- *   ?latitude=...&longitude=...
- *   &start_date=...&end_date=...
- *   &daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_sum
- *   &timezone=Pacific/Auckland
+ * Docs: https://open-meteo.com/en/docs/historical-weather-api
  */
 export async function fetchDailyWeather(
   config: WeatherConfig,
@@ -80,51 +65,7 @@ export async function fetchDailyWeather(
   from: string, // YYYY-MM-DD
   to: string, // YYYY-MM-DD
 ): Promise<WeatherDaily[]> {
-  // --- ATTEMPT: MetService NZ API ---
-  // Try the MetService endpoint. If it fails with 401/403/404, fall through
-  // to the Open-Meteo fallback.
-  try {
-    const url = `https://api.metservice.com/v1/climate/daily?lat=${config.latitude}&lon=${config.longitude}&from=${from}&to=${to}`;
-
-    const response = await fetcher(url, {
-      headers: buildHeaders(config),
-    });
-
-    if (response.ok) {
-      const json = await response.json();
-      return parseMetserviceResponse(json, config);
-    }
-
-    // If auth error (no key / wrong key), don't fallback — fail fast
-    if (response.status === 401 || response.status === 403) {
-      throw new Error(
-        `MetService API returned ${response.status}: check METSERVICE_API_KEY`,
-      );
-    }
-
-    // For 404 / 5xx, fall through to Open-Meteo
-    console.warn(
-      `MetService API returned ${response.status}, falling back to Open-Meteo`,
-    );
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    // Network errors (connection refused, DNS, timeout) fall through
-    if (
-      !message.includes("fetch") &&
-      !message.includes("network") &&
-      !message.includes("ECONNRESET") &&
-      !message.includes("check METSERVICE_API_KEY")
-    ) {
-      console.warn(`MetService fetch failed: ${message}, falling back to Open-Meteo`);
-    } else if (message.includes("check METSERVICE_API_KEY")) {
-      throw err; // don't fallback on auth errors
-    } else {
-      console.warn(`MetService network error: ${message}, falling back to Open-Meteo`);
-    }
-  }
-
-  // --- FALLBACK: Open-Meteo (free, no API key) ---
-  const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${config.latitude}&longitude=${config.longitude}&start_date=${from}&end_date=${to}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_sum&timezone=Pacific/Auckland`;
+  const url = `${OPEN_METEO_BASE}?latitude=${config.latitude}&longitude=${config.longitude}&start_date=${from}&end_date=${to}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_sum&timezone=Pacific/Auckland`;
 
   const response = await fetcher(url);
   if (!response.ok) {
@@ -132,9 +73,7 @@ export async function fetchDailyWeather(
     throw new Error(`Open-Meteo API error ${response.status}: ${text}`);
   }
 
-  const json = await response.json();
-
-  const om = json as {
+  const json = (await response.json()) as {
     daily?: {
       time: string[];
       temperature_2m_max: (number | null)[];
@@ -144,16 +83,16 @@ export async function fetchDailyWeather(
     };
   };
 
-  if (!om.daily) return [];
+  if (!json.daily) return [];
 
   const rows: WeatherDaily[] = [];
-  for (let i = 0; i < (om.daily.time ?? []).length; i++) {
+  for (let i = 0; i < (json.daily.time ?? []).length; i++) {
     rows.push({
-      date: om.daily.time[i],
-      temp_high: om.daily.temperature_2m_max[i] ?? null,
-      temp_low: om.daily.temperature_2m_min[i] ?? null,
-      temp_avg: om.daily.temperature_2m_mean[i] ?? null,
-      rainfall_mm: om.daily.precipitation_sum[i] ?? null,
+      date: json.daily.time[i],
+      temp_high: json.daily.temperature_2m_max[i] ?? null,
+      temp_low: json.daily.temperature_2m_min[i] ?? null,
+      temp_avg: json.daily.temperature_2m_mean[i] ?? null,
+      rainfall_mm: json.daily.precipitation_sum[i] ?? null,
       location_name: config.locationName,
       latitude: config.latitude,
       longitude: config.longitude,
@@ -161,36 +100,6 @@ export async function fetchDailyWeather(
   }
 
   return rows;
-}
-
-/**
- * Parse MetService API response into WeatherDaily[]
- *
- * Exact shape depends on their API — update this once we confirm the endpoint.
- * Expected: { data: [{ date, temp_high, temp_low, temp_avg, rainfall_mm }] }
- */
-function parseMetserviceResponse(
-  json: unknown,
-  config: WeatherConfig,
-): WeatherDaily[] {
-  const data = (json as { data?: Record<string, unknown>[] })?.data ?? [];
-
-  return data.map((row: Record<string, unknown>) => ({
-    date: String(row.date ?? ""),
-    temp_high: toNum(row.temp_high),
-    temp_low: toNum(row.temp_low),
-    temp_avg: toNum(row.temp_avg),
-    rainfall_mm: toNum(row.rainfall_mm ?? row.precipitation_sum),
-    location_name: config.locationName,
-    latitude: config.latitude,
-    longitude: config.longitude,
-  }));
-}
-
-function toNum(v: unknown): number | null {
-  if (v == null) return null;
-  const n = typeof v === "number" ? v : Number(v);
-  return isNaN(n) ? null : n;
 }
 
 // ---------------------------------------------------------------------------

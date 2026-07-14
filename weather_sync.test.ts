@@ -10,11 +10,10 @@ import {
 } from "./lib/weather_sync.ts";
 
 // ---------------------------------------------------------------------------
-// Types
+// Fixtures
 // ---------------------------------------------------------------------------
 
 const testConfig: WeatherConfig = {
-  apiKey: "test-key",
   latitude: -36.8485,
   longitude: 174.7633,
   locationName: "Auckland CBD",
@@ -127,11 +126,7 @@ describe("database operations", () => {
 
 describe("fetchDailyWeather", () => {
   it("parses Open-Meteo API response", async () => {
-    const mockFetch: Fetcher = async (url: string | URL | Request) => {
-      // Simulate MetService failing → fallback to Open-Meteo
-      if (String(url).includes("api.metservice.com")) {
-        return new Response("Not Found", { status: 404 });
-      }
+    const mockFetch: Fetcher = async () => {
       return new Response(
         JSON.stringify({
           daily: {
@@ -158,56 +153,11 @@ describe("fetchDailyWeather", () => {
     expect(rows[0].rainfall_mm).toBe(2.1);
     expect(rows[1].temp_high).toBe(22.1);
     expect(rows[1].rainfall_mm).toBe(0.0);
+    expect(rows[0].location_name).toBe("Auckland CBD");
   });
 
-  it("falls back to Open-Meteo when MetService returns 5xx", async () => {
-    const mockFetch: Fetcher = async (url: string | URL | Request) => {
-      if (String(url).includes("api.metservice.com")) {
-        return new Response("Server Error", { status: 500 });
-      }
-      return new Response(
-        JSON.stringify({
-          daily: {
-            time: ["2025-02-01"],
-            temperature_2m_max: [20.0],
-            temperature_2m_min: [12.0],
-            temperature_2m_mean: [16.0],
-            precipitation_sum: [0.5],
-          },
-        }),
-        { status: 200 },
-      );
-    };
-
-    const rows = await fetchDailyWeather(
-      testConfig,
-      mockFetch,
-      "2025-02-01",
-      "2025-02-28",
-    );
-
-    expect(rows.length).toBe(1);
-    expect(rows[0].temp_avg).toBe(16.0);
-  });
-
-  it("throws on MetService auth error (no fallback)", async () => {
-    const mockFetch: Fetcher = async (url: string | URL | Request) => {
-      if (String(url).includes("api.metservice.com")) {
-        return new Response('{"error":"unauthorized"}', {
-          status: 401,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-      return new Response("{}", { status: 200 });
-    };
-
-    expect(
-      fetchDailyWeather(testConfig, mockFetch, "2025-01-01", "2025-01-02"),
-    ).rejects.toThrow(/check METSERVICE_API_KEY/);
-  });
-
-  it("returns empty array when Open-Meteo has no daily data", async () => {
-    const mockFetch: Fetcher = async (_url: string | URL | Request) => {
+  it("returns empty array when API has no daily data", async () => {
+    const mockFetch: Fetcher = async () => {
       return new Response(JSON.stringify({}), { status: 200 });
     };
 
@@ -221,8 +171,8 @@ describe("fetchDailyWeather", () => {
     expect(rows).toEqual([]);
   });
 
-  it("throws when Open-Meteo also fails", async () => {
-    const mockFetch: Fetcher = async (_url: string | URL | Request) => {
+  it("throws on API error", async () => {
+    const mockFetch: Fetcher = async () => {
       return new Response("Bad Gateway", { status: 502 });
     };
 

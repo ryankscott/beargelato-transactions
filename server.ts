@@ -392,6 +392,64 @@ Bun.serve({
         return json(rows);
       }
 
+      // ----- Weather -----
+
+      // GET /api/weather/daily?days=30
+      if (url.pathname === '/api/weather/daily') {
+        const days = Math.min(parseInt(url.searchParams.get('days') ?? '30'), 365);
+        const rows = db.prepare(`
+          SELECT date, temp_high, temp_low, temp_avg, rainfall_mm
+          FROM weather_daily
+          WHERE date >= date('now', '-' || ? || ' days')
+          ORDER BY date ASC
+        `).all(days);
+        return json(rows);
+      }
+
+      // GET /api/weather/summary
+      if (url.pathname === '/api/weather/summary') {
+        const today = db.prepare(`
+          SELECT * FROM weather_daily WHERE date = date('now')
+        `).get();
+
+        const lastSync = db.prepare(
+          "SELECT value FROM sync_state WHERE key = 'weather_last_sync'"
+        ).get() as { value: string } | undefined;
+
+        return json({
+          today: today ?? null,
+          lastSync: lastSync?.value ?? null,
+        });
+      }
+
+      // GET /api/weather/correlation?days=30
+      if (url.pathname === '/api/weather/correlation') {
+        const days = Math.min(parseInt(url.searchParams.get('days') ?? '30'), 365);
+        const rows = db.prepare(`
+          SELECT
+            s.date,
+            ROUND(s.revenue, 2) as revenue,
+            s.txn_count,
+            w.temp_avg,
+            w.temp_high,
+            w.temp_low,
+            w.rainfall_mm
+          FROM (
+            SELECT
+              created_at_date as date,
+              SUM(curr_amount) as revenue,
+              COUNT(*) as txn_count
+            FROM transactions
+            WHERE type = 'SALE' AND status = 'AUTHORISED'
+              AND created_at_date >= date('now', '-' || ? || ' days')
+            GROUP BY created_at_date
+          ) s
+          LEFT JOIN weather_daily w ON s.date = w.date
+          ORDER BY s.date ASC
+        `).all(days);
+        return json(rows);
+      }
+
       return json({ error: 'Not found' }, 404);
     } catch (err: any) {
       console.error(`API error:`, err);

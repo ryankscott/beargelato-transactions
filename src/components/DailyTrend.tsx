@@ -35,8 +35,8 @@ function CustomTooltip({ active, payload, label }: any) {
   );
 }
 
-export function DailyTrend() {
-  const { data, isLoading, isError } = useDaily(30);
+export function DailyTrend({ includeFoodTruck = false }: { includeFoodTruck?: boolean }) {
+  const { data, isLoading, isError } = useDaily(30, includeFoodTruck);
 
   const chartData = useMemo(() => {
     if (!data) return [];

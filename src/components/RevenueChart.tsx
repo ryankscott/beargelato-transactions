@@ -42,8 +42,8 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   );
 }
 
-export function RevenueChart() {
-  const { data, isLoading, isError } = useMonthly();
+export function RevenueChart({ includeFoodTruck = false }: { includeFoodTruck?: boolean }) {
+  const { data, isLoading, isError } = useMonthly(includeFoodTruck);
 
   const chartData = useMemo(() => {
     if (!data) return [];

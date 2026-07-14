@@ -27,6 +27,7 @@ function getDb() {
       type                  TEXT,
       status                TEXT,
       merchant_reference    TEXT,
+      terminal_id           TEXT,
       imported_at           TEXT DEFAULT (datetime('now'))
     )
   `);
@@ -34,6 +35,9 @@ function getDb() {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_txn_dedup
     ON transactions (created_at_utc, reference)
   `);
+  try {
+    db.run(`ALTER TABLE transactions ADD COLUMN terminal_id TEXT`);
+  } catch {} // column may already exist
   db.run(`
     CREATE TABLE IF NOT EXISTS sync_state (
       key   TEXT PRIMARY KEY,
@@ -105,7 +109,7 @@ function buildColMap(headers: string[]): Record<string, number> {
     return idx;
   }
   return {
-    organisation: col('organisation'),
+    organisation: col('organisation.name'),
     created_at_date: col('created_at_date'),
     created_at_time: col('created_at_time'),
     created_at_timezone: col('created_at_timezone'),
@@ -116,9 +120,9 @@ function buildColMap(headers: string[]): Record<string, number> {
     orig_amount_currency: col('orig.amount currency code'),
     curr_amount: col('curr.amount'),
     curr_amount_currency: col('curr.amount currency code'),
-    type: col('type'),
     status: col('status'),
     merchant_reference: col('merchant_reference'),
+    terminal_id: col('terminal_id'),
   };
 }
 
@@ -152,8 +156,8 @@ export async function runSync(): Promise<{ inserted: number; skipped: number; ne
       created_at_utc, reference, product,
       orig_amount, orig_amount_currency,
       curr_amount, curr_amount_currency,
-      type, status, merchant_reference
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      type, status, merchant_reference, terminal_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const insertBatch = db.transaction(
@@ -161,6 +165,14 @@ export async function runSync(): Promise<{ inserted: number; skipped: number; ne
       let inserted = 0;
       for (const line of dataLines) {
         const f = parseCSVLine(line);
+        const rawStatus = field(f, COL.status);
+        let txnType: string | null = null;
+        let txnStatus: string | null = null;
+        if (rawStatus) {
+          const parts = rawStatus.split(' ');
+          txnType = parts[0];
+          txnStatus = parts.slice(1).join(' ') || null;
+        }
         const result = insertStmt.run(
           field(f, COL.organisation),
           field(f, COL.created_at_date),
@@ -173,9 +185,10 @@ export async function runSync(): Promise<{ inserted: number; skipped: number; ne
           field(f, COL.orig_amount_currency),
           numField(f, COL.curr_amount),
           field(f, COL.curr_amount_currency),
-          field(f, COL.type),
-          field(f, COL.status),
+          txnType,
+          txnStatus,
           field(f, COL.merchant_reference),
+          field(f, COL.terminal_id),
         );
         inserted += result.changes;
       }
@@ -198,7 +211,7 @@ export async function runSync(): Promise<{ inserted: number; skipped: number; ne
       reportName: 'custom',
       templateDetails: {
         templateType: 'STANDARD',
-        template: 'SIMPLIFIED_TRANSACTIONS_GROUPED',
+        template: 'DETAILED_TRANSACTIONS_GROUPED',
       },
       notificationEmails: NOTIFICATION_EMAIL ? [NOTIFICATION_EMAIL] : [],
       search: '(followOnTransaction==null)',

@@ -4,8 +4,8 @@ import { useSummary } from '@/hooks/useApi';
 import { formatCurrency } from '@/lib/utils';
 import { DollarSign, ShoppingCart, Calendar, CalendarDays } from 'lucide-react';
 
-export function StatsCards() {
-  const { data, isLoading, isError } = useSummary();
+export function StatsCards({ includeFoodTruck = false }: { includeFoodTruck?: boolean }) {
+  const { data, isLoading, isError } = useSummary(includeFoodTruck);
 
   if (isLoading) {
     return (

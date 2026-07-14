@@ -45,6 +45,12 @@ function json(data: unknown, status = 200) {
   });
 }
 
+function terminalFilter(includeFoodTruck: boolean): string {
+  return includeFoodTruck
+    ? ''
+    : " AND (terminal_id IS NULL OR terminal_id != '89340301')";
+}
+
 Bun.serve({
   port: PORT,
   async fetch(req) {
@@ -60,9 +66,12 @@ Bun.serve({
       try {
       // GET /api/stats/summary
       if (url.pathname === '/api/stats/summary') {
+        const includeFoodTruck = url.searchParams.get('include_food_truck') === 'true';
+        const tf = terminalFilter(includeFoodTruck);
+
         const total = db.prepare(`
           SELECT COUNT(*) as count, ROUND(SUM(orig_amount), 2) as revenue
-          FROM transactions WHERE type = 'SALE' AND status = 'AUTHORISED'
+          FROM transactions WHERE type = 'SALE' AND status = 'AUTHORISED'${tf}
         `).get() as { count: number; revenue: number };
 
         const lastSync = db.prepare(
@@ -75,14 +84,14 @@ Bun.serve({
 
         const avgTxn = db.prepare(`
           SELECT ROUND(AVG(orig_amount), 2) as avg
-          FROM transactions WHERE type = 'SALE' AND status = 'AUTHORISED'
+          FROM transactions WHERE type = 'SALE' AND status = 'AUTHORISED'${tf}
         `).get() as { avg: number };
 
         const thisMonth = new Date().toISOString().slice(0, 7);
         const monthRevenue = db.prepare(`
           SELECT ROUND(SUM(orig_amount), 2) as revenue
           FROM transactions
-          WHERE type = 'SALE' AND status = 'AUTHORISED'
+          WHERE type = 'SALE' AND status = 'AUTHORISED'${tf}
           AND strftime('%Y-%m', created_at_utc) = ?
         `).get(thisMonth) as { revenue: number };
 
@@ -90,21 +99,21 @@ Bun.serve({
         const yearRevenue = db.prepare(`
           SELECT ROUND(SUM(orig_amount), 2) as revenue
           FROM transactions
-          WHERE type = 'SALE' AND status = 'AUTHORISED'
+          WHERE type = 'SALE' AND status = 'AUTHORISED'${tf}
           AND strftime('%Y', created_at_utc) = ?
         `).get(thisYear) as { revenue: number };
 
         const todayRevenue = db.prepare(`
           SELECT ROUND(SUM(orig_amount), 2) as revenue
           FROM transactions
-          WHERE type = 'SALE' AND status = 'AUTHORISED'
+          WHERE type = 'SALE' AND status = 'AUTHORISED'${tf}
           AND date(created_at_utc) = date('now')
         `).get() as { revenue: number };
 
         const weekRevenue = db.prepare(`
           SELECT ROUND(SUM(orig_amount), 2) as revenue
           FROM transactions
-          WHERE type = 'SALE' AND status = 'AUTHORISED'
+          WHERE type = 'SALE' AND status = 'AUTHORISED'${tf}
           AND strftime('%Y-%W', created_at_utc) = strftime('%Y-%W', 'now')
         `).get() as { revenue: number };
 
@@ -123,6 +132,7 @@ Bun.serve({
 
       // GET /api/stats/monthly
       if (url.pathname === '/api/stats/monthly') {
+        const includeFoodTruck = url.searchParams.get('include_food_truck') === 'true';
         const rows = db.prepare(`
           SELECT
             strftime('%Y-%m', created_at_utc) as month,
@@ -130,19 +140,22 @@ Bun.serve({
             ROUND(SUM(orig_amount), 2) as revenue,
             ROUND(AVG(orig_amount), 2) as avg_txn
           FROM transactions
-          WHERE type = 'SALE' AND status = 'AUTHORISED'
+          WHERE type = 'SALE' AND status = 'AUTHORISED'${terminalFilter(includeFoodTruck)}
           GROUP BY month
           ORDER BY month ASC
         `).all();
         return json(rows);
       }
 
-      // GET /api/transactions?limit=50&offset=0
+      // GET /api/transactions?limit=50&offset=0&include_food_truck=true
       if (url.pathname === '/api/transactions') {
         const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '50'), 200);
         const offset = parseInt(url.searchParams.get('offset') ?? '0');
+        const includeFoodTruck = url.searchParams.get('include_food_truck') === 'true';
+        const tf = terminalFilter(includeFoodTruck);
         const rows = db.prepare(`
           SELECT * FROM transactions
+          WHERE 1=1${tf}
           ORDER BY created_at_utc DESC
           LIMIT ? OFFSET ?
         `).all(limit, offset);
@@ -152,13 +165,14 @@ Bun.serve({
       // GET /api/stats/weekly
       if (url.pathname === '/api/stats/weekly') {
         const weeks = parseInt(url.searchParams.get('weeks') ?? '12');
+        const includeFoodTruck = url.searchParams.get('include_food_truck') === 'true';
         const rows = db.prepare(`
           SELECT
             strftime('%Y-%W', created_at_utc) as week,
             COUNT(*) as txn_count,
             ROUND(SUM(orig_amount), 2) as revenue
           FROM transactions
-          WHERE type = 'SALE' AND status = 'AUTHORISED'
+          WHERE type = 'SALE' AND status = 'AUTHORISED'${terminalFilter(includeFoodTruck)}
           GROUP BY week
           ORDER BY week DESC
           LIMIT ?
@@ -169,6 +183,7 @@ Bun.serve({
       // GET /api/stats/daily?days=30
       if (url.pathname === '/api/stats/daily') {
         const days = parseInt(url.searchParams.get('days') ?? '30');
+        const includeFoodTruck = url.searchParams.get('include_food_truck') === 'true';
         const rows = db.prepare(`
           SELECT
             created_at_date as date,
@@ -176,7 +191,7 @@ Bun.serve({
             ROUND(SUM(orig_amount), 2) as revenue,
             ROUND(AVG(orig_amount), 2) as avg_txn
           FROM transactions
-          WHERE type = 'SALE' AND status = 'AUTHORISED'
+          WHERE type = 'SALE' AND status = 'AUTHORISED'${terminalFilter(includeFoodTruck)}
           GROUP BY created_at_date
           ORDER BY created_at_date DESC
           LIMIT ?

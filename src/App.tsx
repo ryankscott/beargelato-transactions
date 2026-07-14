@@ -11,7 +11,6 @@ import { InstagramCorrelationChart } from '@/components/InstagramCorrelationChar
 import { InstagramPostImpact } from '@/components/InstagramPostImpact';
 import { InstagramContentROI } from '@/components/InstagramContentROI';
 import { WeatherCorrelationChart } from '@/components/WeatherCorrelationChart';
-import { WeatherStatsCard } from '@/components/WeatherStatsCard';
 import { formatDate } from '@/lib/utils';
 import { useSummary } from '@/hooks/useApi';
 
@@ -110,6 +109,7 @@ function Header({ tab, onTabChange, onSync }: {
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('transactions');
+  const [includeFoodTruck, setIncludeFoodTruck] = useState(false);
   const queryClient = useQueryClient();
 
   const handleSync = () => {
@@ -123,10 +123,18 @@ export default function App() {
 
         {tab === 'transactions' && (
           <div className="space-y-6">
-            <StatsCards />
-            <WeatherStatsCard />
-            <RevenueChart />
-            <DailyTrend />
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={includeFoodTruck}
+                onChange={(e) => setIncludeFoodTruck(e.target.checked)}
+                className="rounded border-border"
+              />
+              Include Food truck data
+            </label>
+            <StatsCards includeFoodTruck={includeFoodTruck} />
+            <RevenueChart includeFoodTruck={includeFoodTruck} />
+            <DailyTrend includeFoodTruck={includeFoodTruck} />
             <WeatherCorrelationChart />
           </div>
         )}

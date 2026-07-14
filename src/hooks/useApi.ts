@@ -28,6 +28,7 @@ export interface Transaction {
   type: string;
   status: string;
   merchant_reference: string;
+  terminal_id: string | null;
 }
 
 export interface SummaryStats {
@@ -64,42 +65,42 @@ export interface WeeklyRow {
 
 // --- Hooks ---
 
-export function useSummary() {
+export function useSummary(includeFoodTruck = false) {
   return useQuery<SummaryStats>({
-    queryKey: ['summary'],
-    queryFn: () => fetchJson(`${BASE}/stats/summary`),
+    queryKey: ['summary', includeFoodTruck],
+    queryFn: () => fetchJson(`${BASE}/stats/summary?include_food_truck=${includeFoodTruck}`),
     refetchInterval: 60_000,
   });
 }
 
-export function useMonthly() {
+export function useMonthly(includeFoodTruck = false) {
   return useQuery<MonthlyRow[]>({
-    queryKey: ['monthly'],
-    queryFn: () => fetchJson(`${BASE}/stats/monthly`),
+    queryKey: ['monthly', includeFoodTruck],
+    queryFn: () => fetchJson(`${BASE}/stats/monthly?include_food_truck=${includeFoodTruck}`),
     staleTime: 5 * 60_000,
   });
 }
 
-export function useDaily(days = 30) {
+export function useDaily(days = 30, includeFoodTruck = false) {
   return useQuery<DailyRow[]>({
-    queryKey: ['daily', days],
-    queryFn: () => fetchJson(`${BASE}/stats/daily?days=${days}`),
+    queryKey: ['daily', days, includeFoodTruck],
+    queryFn: () => fetchJson(`${BASE}/stats/daily?days=${days}&include_food_truck=${includeFoodTruck}`),
     staleTime: 5 * 60_000,
   });
 }
 
-export function useWeekly(weeks = 12) {
+export function useWeekly(weeks = 12, includeFoodTruck = false) {
   return useQuery<WeeklyRow[]>({
-    queryKey: ['weekly', weeks],
-    queryFn: () => fetchJson(`${BASE}/stats/weekly?weeks=${weeks}`),
+    queryKey: ['weekly', weeks, includeFoodTruck],
+    queryFn: () => fetchJson(`${BASE}/stats/weekly?weeks=${weeks}&include_food_truck=${includeFoodTruck}`),
     staleTime: 5 * 60_000,
   });
 }
 
-export function useTransactions(limit = 50, offset = 0) {
+export function useTransactions(limit = 50, offset = 0, includeFoodTruck = false) {
   return useQuery<Transaction[]>({
-    queryKey: ['transactions', limit, offset],
-    queryFn: () => fetchJson(`${BASE}/transactions?limit=${limit}&offset=${offset}`),
+    queryKey: ['transactions', limit, offset, includeFoodTruck],
+    queryFn: () => fetchJson(`${BASE}/transactions?limit=${limit}&offset=${offset}&include_food_truck=${includeFoodTruck}`),
     staleTime: 60_000,
   });
 }

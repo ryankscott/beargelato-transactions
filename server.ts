@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { runSync } from './sync-core.ts';
+import { createWeatherSchema } from './lib/weather_sync.ts';
 import { existsSync } from 'fs';
 import path from 'path';
 
@@ -7,6 +8,10 @@ const DB_PATH = process.env.DB_PATH ?? 'transactions.db';
 const PORT = parseInt(process.env.PORT ?? '3001') || 3001;
 
 const db = new Database(DB_PATH);
+
+// Ensure weather_daily table exists (also created by sync-core, but server
+// opens DB directly and doesn't call getDb())
+createWeatherSchema(db);
 
 // Serve built frontend from dist/ in production
 const DIST_DIR = path.join(import.meta.dir, 'dist');

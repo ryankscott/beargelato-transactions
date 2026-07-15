@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { RefreshCcw, Loader2, BarChart3, Instagram } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { StatsCards } from '@/components/StatsCards';
+import { RevenueChart } from '@/components/RevenueChart';
 import { DailyWeatherChart } from '@/components/DailyWeatherChart';
 import { Checkbox } from '@/components/ui/checkbox';
 import { InstagramStatsCards } from '@/components/InstagramStatsCards';
@@ -131,6 +132,7 @@ export default function App() {
               Include Food truck data
             </label>
             <StatsCards includeFoodTruck={includeFoodTruck} />
+            <RevenueChart includeFoodTruck={includeFoodTruck} />
             <DailyWeatherChart includeFoodTruck={includeFoodTruck} />
           </div>
         )}

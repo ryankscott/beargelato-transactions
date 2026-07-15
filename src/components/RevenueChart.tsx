@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useMonthly } from '@/hooks/useApi';
+import { useMonthly, useMonthlyBySource } from '@/hooks/useApi';
 import { formatCurrency, formatMonth } from '@/lib/utils';
 import { TrendingUp } from 'lucide-react';
 
@@ -24,6 +24,34 @@ interface CustomTooltipProps {
 function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
+
+  if (d.shop_revenue != null) {
+    return (
+      <div className="rounded-lg border bg-popover p-3 shadow-md text-popover-foreground">
+        <p className="text-sm font-semibold mb-1">{label}</p>
+        <div className="space-y-1 text-xs">
+          <p className="flex justify-between gap-4">
+            Shop: <span className="font-mono font-semibold text-emerald-400">{formatCurrency(d.shop_revenue)}</span>
+          </p>
+          {d.food_truck_revenue > 0 && (
+            <p className="flex justify-between gap-4">
+              Food Truck: <span className="font-mono font-semibold text-amber-400">{formatCurrency(d.food_truck_revenue)}</span>
+            </p>
+          )}
+          <p className="flex justify-between gap-4 border-t border-border pt-1 mt-1">
+            Total: <span className="font-mono font-semibold text-emerald-400">{formatCurrency(d.shop_revenue + d.food_truck_revenue)}</span>
+          </p>
+          <p className="flex justify-between gap-4">
+            Shop Txns: <span className="font-mono">{d.shop_txns.toLocaleString()}</span>
+          </p>
+          <p className="flex justify-between gap-4">
+            Truck Txns: <span className="font-mono">{d.food_truck_txns.toLocaleString()}</span>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-lg border bg-popover p-3 shadow-md text-popover-foreground">
       <p className="text-sm font-semibold mb-1">{label}</p>
@@ -43,23 +71,37 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
 }
 
 export function RevenueChart({ includeFoodTruck = false }: { includeFoodTruck?: boolean }) {
-  const { data, isLoading, isError } = useMonthly(includeFoodTruck);
+  const monthly = useMonthly(false);
+  const monthlyBySource = useMonthlyBySource();
 
   const chartData = useMemo(() => {
-    if (!data) return [];
-    return data.map((row) => ({
+    if (includeFoodTruck) {
+      if (!monthlyBySource.data) return [];
+      return monthlyBySource.data.map((row) => ({
+        ...row,
+        displayMonth: formatMonth(row.month),
+      }));
+    }
+    if (!monthly.data) return [];
+    return monthly.data.map((row) => ({
       ...row,
       displayMonth: formatMonth(row.month),
       revenueLabel: formatCurrency(row.revenue),
     }));
-  }, [data]);
+  }, [monthly.data, monthlyBySource.data, includeFoodTruck]);
 
   const avgRevenue = useMemo(() => {
     if (!chartData.length) return 0;
+    if (includeFoodTruck) {
+      return chartData.reduce((s, d) => s + d.shop_revenue + d.food_truck_revenue, 0) / chartData.length;
+    }
     return chartData.reduce((s, d) => s + d.revenue, 0) / chartData.length;
-  }, [chartData]);
+  }, [chartData, includeFoodTruck]);
 
-  if (isLoading) {
+  const loading = includeFoodTruck ? monthlyBySource.isLoading : monthly.isLoading;
+  const error = includeFoodTruck ? monthlyBySource.isError : monthly.isError;
+
+  if (loading) {
     return (
       <Card>
         <CardHeader>
@@ -73,7 +115,7 @@ export function RevenueChart({ includeFoodTruck = false }: { includeFoodTruck?: 
     );
   }
 
-  if (isError) {
+  if (error) {
     return (
       <Card className="border-destructive/50">
         <CardContent className="pt-6">
@@ -92,7 +134,9 @@ export function RevenueChart({ includeFoodTruck = false }: { includeFoodTruck?: 
               <TrendingUp className="h-5 w-5 text-emerald-400" />
               Monthly Revenue
             </CardTitle>
-            <CardDescription>Authorised NZD sales over time</CardDescription>
+            <CardDescription>
+              {includeFoodTruck ? 'Shop vs Food truck revenue over time' : 'Authorised NZD sales over time'}
+            </CardDescription>
           </div>
         </div>
       </CardHeader>
@@ -127,12 +171,33 @@ export function RevenueChart({ includeFoodTruck = false }: { includeFoodTruck?: 
                 fontSize: 11,
               }}
             />
-            <Bar
-              dataKey="revenue"
-              fill="hsl(142 70% 45%)"
-              radius={[4, 4, 0, 0]}
-              maxBarSize={40}
-            />
+            {includeFoodTruck ? (
+              <>
+                <Bar
+                  dataKey="shop_revenue"
+                  name="Shop"
+                  stackId="revenue"
+                  fill="hsl(142 70% 45%)"
+                  radius={[0, 0, 0, 0]}
+                  maxBarSize={40}
+                />
+                <Bar
+                  dataKey="food_truck_revenue"
+                  name="Food Truck"
+                  stackId="revenue"
+                  fill="hsl(39 100% 50%)"
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={40}
+                />
+              </>
+            ) : (
+              <Bar
+                dataKey="revenue"
+                fill="hsl(142 70% 45%)"
+                radius={[4, 4, 0, 0]}
+                maxBarSize={40}
+              />
+            )}
           </BarChart>
         </ResponsiveContainer>
       </CardContent>

@@ -4,26 +4,38 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTransactions } from '@/hooks/useApi';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import { ArrowUpDown, ExternalLink } from 'lucide-react';
+import { ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
+
+const PAGE_SIZE = 50;
 
 type SortField = 'created_at_utc' | 'orig_amount' | 'type' | 'status';
 type SortDir = 'asc' | 'desc';
 
+const STATUS_OPTIONS = ['', 'AUTHORISED', 'DECLINED', 'FAILED', 'REFUNDED', 'PENDING'];
+const TYPE_OPTIONS = ['', 'SALE', 'REFUND', 'VOID'];
+
+function getStatusVariant(status: string) {
+  switch (status) {
+    case 'AUTHORISED': return 'success' as const;
+    case 'DECLINED': return 'destructive' as const;
+    case 'FAILED': return 'warning' as const;
+    default: return 'secondary' as const;
+  }
+}
+
 export function TransactionTable() {
-  const { data, isLoading, isError } = useTransactions(50);
+  const [page, setPage] = useState(0);
+  const [typeFilter, setTypeFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [sortField, setSortField] = useState<SortField>('created_at_utc');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
-  const sorted = [...(data ?? [])].sort((a, b) => {
-    const aVal = a[sortField];
-    const bVal = b[sortField];
-    if (typeof aVal === 'number' && typeof bVal === 'number') {
-      return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
-    }
-    const sa = String(aVal ?? '');
-    const sb = String(bVal ?? '');
-    return sortDir === 'asc' ? sa.localeCompare(sb) : sb.localeCompare(sa);
-  });
+  const offset = page * PAGE_SIZE;
+  const { data, isLoading, isError } = useTransactions(PAGE_SIZE, offset, false, typeFilter || undefined, statusFilter || undefined, sortField, sortDir);
+
+  const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0;
+  const showingFrom = data ? offset + 1 : 0;
+  const showingTo = data ? Math.min(offset + PAGE_SIZE, data.total) : 0;
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -32,15 +44,17 @@ export function TransactionTable() {
       setSortField(field);
       setSortDir('desc');
     }
+    setPage(0);
   };
 
-  const getStatusVariant = (status: string) => {
-    switch (status) {
-      case 'AUTHORISED': return 'success' as const;
-      case 'DECLINED': return 'destructive' as const;
-      case 'FAILED': return 'warning' as const;
-      default: return 'secondary' as const;
-    }
+  const handleTypeFilter = (val: string) => {
+    setTypeFilter(val);
+    setPage(0);
+  };
+
+  const handleStatusFilter = (val: string) => {
+    setStatusFilter(val);
+    setPage(0);
   };
 
   if (isLoading) {
@@ -72,8 +86,34 @@ export function TransactionTable() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Recent Transactions</CardTitle>
-        <CardDescription>{sorted.length} most recent records</CardDescription>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <CardTitle>Transactions</CardTitle>
+            <CardDescription>{data?.total.toLocaleString()} total records</CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={statusFilter}
+              onChange={(e) => handleStatusFilter(e.target.value)}
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">All Status</option>
+              {STATUS_OPTIONS.filter(Boolean).map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <select
+              value={typeFilter}
+              onChange={(e) => handleTypeFilter(e.target.value)}
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">All Types</option>
+              {TYPE_OPTIONS.filter(Boolean).map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
@@ -95,7 +135,7 @@ export function TransactionTable() {
                     <span className="inline-flex items-center gap-1">
                       {col.label}
                       {col.field && sortField === col.field && (
-                        <ArrowUpDown className="h-3 w-3" />
+                        <ArrowUpDown className={`h-3 w-3 transition-transform ${sortDir === 'asc' ? 'rotate-180' : ''}`} />
                       )}
                     </span>
                   </th>
@@ -103,7 +143,7 @@ export function TransactionTable() {
               </tr>
             </thead>
             <tbody>
-              {sorted.map((txn) => (
+              {data?.rows.map((txn) => (
                 <tr
                   key={txn.id}
                   className="border-b border-border/50 hover:bg-muted/30 transition-colors"
@@ -124,7 +164,7 @@ export function TransactionTable() {
                       {txn.status}
                     </Badge>
                   </td>
-                  <td className="py-2.5 pr-4 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                  <td className="py-2.5 pr-4 font-mono text-xs text-muted-foreground whitespace-nowrap max-w-[200px] truncate">
                     {txn.reference}
                   </td>
                 </tr>
@@ -132,6 +172,48 @@ export function TransactionTable() {
             </tbody>
           </table>
         </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
+            <p className="text-xs text-muted-foreground">
+              Showing {showingFrom}–{showingTo} of {data?.total.toLocaleString()}
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-input bg-background text-xs hover:bg-accent disabled:opacity-30 disabled:pointer-events-none transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                const start = Math.max(0, Math.min(page - 3, totalPages - 7));
+                const pageNum = start + i;
+                if (pageNum >= totalPages) return null;
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setPage(pageNum)}
+                    className={`h-8 w-8 inline-flex items-center justify-center rounded-md text-xs font-medium transition-colors ${
+                      pageNum === page
+                        ? 'bg-primary text-primary-foreground'
+                        : 'border border-input bg-background hover:bg-accent'
+                    }`}
+                  >
+                    {pageNum + 1}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+                className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-input bg-background text-xs hover:bg-accent disabled:opacity-30 disabled:pointer-events-none transition-colors"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

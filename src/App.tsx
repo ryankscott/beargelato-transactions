@@ -3,14 +3,13 @@ import { Button } from '@/components/ui/button';
 import { RefreshCcw, Loader2, BarChart3, Instagram } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { StatsCards } from '@/components/StatsCards';
-import { RevenueChart } from '@/components/RevenueChart';
-import { DailyTrend } from '@/components/DailyTrend';
+import { DailyWeatherChart } from '@/components/DailyWeatherChart';
+import { Checkbox } from '@/components/ui/checkbox';
 import { InstagramStatsCards } from '@/components/InstagramStatsCards';
 import { InstagramMediaGrid } from '@/components/InstagramMediaGrid';
 import { InstagramCorrelationChart } from '@/components/InstagramCorrelationChart';
 import { InstagramPostImpact } from '@/components/InstagramPostImpact';
-import { InstagramContentROI } from '@/components/InstagramContentROI';
-import { WeatherCorrelationChart } from '@/components/WeatherCorrelationChart';
+import { Toaster, toast } from 'sonner';
 import { formatDate } from '@/lib/utils';
 import { useSummary } from '@/hooks/useApi';
 
@@ -23,20 +22,18 @@ function Header({ tab, onTabChange, onSync }: {
 }) {
   const { data } = useSummary();
   const [syncing, setSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState('');
 
   const handleSync = async () => {
     setSyncing(true);
-    setSyncMessage('Syncing...');
+    const id = toast.loading('Syncing...');
     try {
       const res = await fetch('/api/sync', { method: 'POST' });
       if (!res.ok) throw new Error('Sync failed');
       const result = await res.json();
-      setSyncMessage(`Added ${result.inserted} new transactions`);
+      toast.success(`Added ${result.inserted} new transactions`, { id });
       onSync();
-      setTimeout(() => setSyncMessage(''), 5000);
     } catch (err: any) {
-      setSyncMessage(`Error: ${err.message}`);
+      toast.error(`Sync failed: ${err.message}`, { id });
     } finally {
       setSyncing(false);
     }
@@ -52,51 +49,48 @@ function Header({ tab, onTabChange, onSync }: {
           {tab === 'transactions' ? 'Transaction Dashboard' : 'Instagram Analytics'}
         </p>
       </div>
-      <div className="flex items-center gap-3">
-        {/* Tab switcher */}
-        <div className="flex bg-muted rounded-lg p-0.5">
-          <button
-            onClick={() => onTabChange('transactions')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              tab === 'transactions'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <BarChart3 className="h-3.5 w-3.5" />
-            Sales
-          </button>
-          <button
-            onClick={() => onTabChange('instagram')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              tab === 'instagram'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <Instagram className="h-3.5 w-3.5" />
-            Instagram
-          </button>
-        </div>
+      <div className="flex flex-col items-end gap-1">
+        <div className="flex items-center gap-3">
+          {/* Tab switcher */}
+          <div className="flex bg-muted rounded-lg p-0.5">
+            <button
+              onClick={() => onTabChange('transactions')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                tab === 'transactions'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              Sales
+            </button>
+            <button
+              onClick={() => onTabChange('instagram')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                tab === 'instagram'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Instagram className="h-3.5 w-3.5" />
+              Instagram
+            </button>
+          </div>
 
-        <Button
-          onClick={handleSync}
-          disabled={syncing}
-          variant="outline"
-          size="sm"
-        >
-          {syncing ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCcw className="h-4 w-4" />
-          )}
-          Refresh Data
-        </Button>
-        {syncMessage && (
-          <span className={`text-xs ${syncMessage.startsWith('Error') ? 'text-destructive' : 'text-emerald-400'}`}>
-            {syncMessage}
-          </span>
-        )}
+          <Button
+            onClick={handleSync}
+            disabled={syncing}
+            variant="outline"
+            size="sm"
+          >
+            {syncing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCcw className="h-4 w-4" />
+            )}
+            Refresh Data
+          </Button>
+        </div>
         {data?.lastSyncTime && tab === 'transactions' && (
           <span className="text-xs text-muted-foreground">
             Verifone: {formatDate(data.lastSyncTime)}
@@ -118,24 +112,26 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-background">
+      <Toaster
+        position="bottom-right"
+        toastOptions={{
+          style: { background: 'hsl(240 4% 16%)', color: 'hsl(0 0% 98%)', border: '1px solid hsl(240 4% 20%)' },
+        }}
+      />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Header tab={tab} onTabChange={setTab} onSync={handleSync} />
 
         {tab === 'transactions' && (
           <div className="space-y-6">
             <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={includeFoodTruck}
-                onChange={(e) => setIncludeFoodTruck(e.target.checked)}
-                className="rounded border-border"
+                onCheckedChange={(c) => setIncludeFoodTruck(c === true)}
               />
               Include Food truck data
             </label>
             <StatsCards includeFoodTruck={includeFoodTruck} />
-            <RevenueChart includeFoodTruck={includeFoodTruck} />
-            <DailyTrend includeFoodTruck={includeFoodTruck} />
-            <WeatherCorrelationChart />
+            <DailyWeatherChart includeFoodTruck={includeFoodTruck} />
           </div>
         )}
 
@@ -147,7 +143,6 @@ export default function App() {
             <h2 className="text-lg font-semibold pt-2 border-t border-border">📊 Correlation Analysis</h2>
 
             <InstagramPostImpact />
-            <InstagramContentROI />
             <InstagramMediaGrid />
           </div>
         )}

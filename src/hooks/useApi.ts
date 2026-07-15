@@ -81,6 +81,38 @@ export function useMonthly(includeFoodTruck = false) {
   });
 }
 
+export interface DailyBySourceRow {
+  date: string;
+  shop_revenue: number;
+  food_truck_revenue: number;
+  shop_txns: number;
+  food_truck_txns: number;
+}
+
+export interface MonthlyBySourceRow {
+  month: string;
+  shop_revenue: number;
+  food_truck_revenue: number;
+  shop_txns: number;
+  food_truck_txns: number;
+}
+
+export function useMonthlyBySource() {
+  return useQuery<MonthlyBySourceRow[]>({
+    queryKey: ['monthly-by-source'],
+    queryFn: () => fetchJson(`${BASE}/stats/monthly-by-source`),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useDailyBySource(days = 30) {
+  return useQuery<DailyBySourceRow[]>({
+    queryKey: ['daily-by-source', days],
+    queryFn: () => fetchJson(`${BASE}/stats/daily-by-source?days=${days}`),
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useDaily(days = 30, includeFoodTruck = false) {
   return useQuery<DailyRow[]>({
     queryKey: ['daily', days, includeFoodTruck],
@@ -97,10 +129,22 @@ export function useWeekly(weeks = 12, includeFoodTruck = false) {
   });
 }
 
-export function useTransactions(limit = 50, offset = 0, includeFoodTruck = false) {
-  return useQuery<Transaction[]>({
-    queryKey: ['transactions', limit, offset, includeFoodTruck],
-    queryFn: () => fetchJson(`${BASE}/transactions?limit=${limit}&offset=${offset}&include_food_truck=${includeFoodTruck}`),
+export interface TransactionPage {
+  rows: Transaction[];
+  total: number;
+}
+
+export function useTransactions(limit = 50, offset = 0, includeFoodTruck = false, type?: string, status?: string, sort?: string, dir?: string) {
+  return useQuery<TransactionPage>({
+    queryKey: ['transactions', limit, offset, includeFoodTruck, type, status, sort, dir],
+    queryFn: () => {
+      const params = new URLSearchParams({ limit: String(limit), offset: String(offset), include_food_truck: String(includeFoodTruck) });
+      if (type) params.set('type', type);
+      if (status) params.set('status', status);
+      if (sort) params.set('sort', sort);
+      if (dir) params.set('dir', dir);
+      return fetchJson(`${BASE}/transactions?${params}`);
+    },
     staleTime: 60_000,
   });
 }
@@ -219,10 +263,21 @@ export interface ContentTypeROI {
 
 // --- Analysis Hooks ---
 
-export function usePostImpact(days = 7) {
-  return useQuery<PostImpact[]>({
-    queryKey: ['instagram-post-impact', days],
-    queryFn: () => fetchJson(`${BASE}/instagram/post-impact?days=${days}`),
+export interface PostImpactPage {
+  rows: PostImpact[];
+  total: number;
+}
+
+export function usePostImpact(days = 7, limit = 20, offset = 0, sort?: string, dir?: string, mediaType?: string) {
+  return useQuery<PostImpactPage>({
+    queryKey: ['instagram-post-impact', days, limit, offset, sort, dir, mediaType],
+    queryFn: () => {
+      const params = new URLSearchParams({ days: String(days), limit: String(limit), offset: String(offset) });
+      if (sort) params.set('sort', sort);
+      if (dir) params.set('dir', dir);
+      if (mediaType) params.set('media_type', mediaType);
+      return fetchJson(`${BASE}/instagram/post-impact?${params}`);
+    },
     staleTime: 5 * 60_000,
   });
 }

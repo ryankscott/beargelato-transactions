@@ -6,6 +6,7 @@ import path from 'path';
 
 const DB_PATH = process.env.DB_PATH ?? 'transactions.db';
 const PORT = parseInt(process.env.PORT ?? '3001') || 3001;
+const FOOD_TRUCK_TERMINAL_ID = '89340301';
 
 const db = new Database(DB_PATH);
 
@@ -48,7 +49,7 @@ function json(data: unknown, status = 200) {
 function terminalFilter(includeFoodTruck: boolean): string {
   return includeFoodTruck
     ? ''
-    : " AND (terminal_id IS NULL OR terminal_id != '89340301')";
+    : ` AND (terminal_id IS NULL OR terminal_id != '${FOOD_TRUCK_TERMINAL_ID}')`;
 }
 
 Bun.serve({
@@ -147,19 +148,36 @@ Bun.serve({
         return json(rows);
       }
 
-      // GET /api/transactions?limit=50&offset=0&include_food_truck=true
+      // GET /api/transactions?limit=50&offset=0&include_food_truck=true&type=SALE&status=AUTHORISED
       if (url.pathname === '/api/transactions') {
         const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '50'), 200);
         const offset = parseInt(url.searchParams.get('offset') ?? '0');
         const includeFoodTruck = url.searchParams.get('include_food_truck') === 'true';
+        const typeFilter = url.searchParams.get('type');
+        const statusFilter = url.searchParams.get('status');
+        const sortField = url.searchParams.get('sort') ?? 'created_at_utc';
+        const sortDir = url.searchParams.get('dir') ?? 'desc';
+
+        const allowedSortFields = ['created_at_utc', 'orig_amount', 'type', 'status'];
+        const sf = allowedSortFields.includes(sortField) ? sortField : 'created_at_utc';
+        const sd = sortDir === 'asc' ? 'ASC' : 'DESC';
+
         const tf = terminalFilter(includeFoodTruck);
+        const typeClause = typeFilter ? ` AND type = '${typeFilter.replace(/'/g, "''")}'` : '';
+        const statusClause = statusFilter ? ` AND status = '${statusFilter.replace(/'/g, "''")}'` : '';
+
+        const countRow = db.prepare(`
+          SELECT COUNT(*) as total FROM transactions
+          WHERE 1=1${tf}${typeClause}${statusClause}
+        `).get() as { total: number };
+
         const rows = db.prepare(`
           SELECT * FROM transactions
-          WHERE 1=1${tf}
-          ORDER BY created_at_utc DESC
+          WHERE 1=1${tf}${typeClause}${statusClause}
+          ORDER BY ${sf} ${sd}
           LIMIT ? OFFSET ?
         `).all(limit, offset);
-        return json(rows);
+        return json({ rows, total: countRow.total });
       }
 
       // GET /api/stats/weekly
@@ -197,6 +215,42 @@ Bun.serve({
           LIMIT ?
         `).all(days);
         return json(rows.reverse());
+      }
+
+      // GET /api/stats/daily-by-source?days=30
+      if (url.pathname === '/api/stats/daily-by-source') {
+        const days = parseInt(url.searchParams.get('days') ?? '30');
+        const rows = db.prepare(`
+          SELECT
+            created_at_date as date,
+            ROUND(SUM(CASE WHEN terminal_id = '${FOOD_TRUCK_TERMINAL_ID}' THEN orig_amount ELSE 0 END), 2) as food_truck_revenue,
+            ROUND(SUM(CASE WHEN terminal_id IS NULL OR terminal_id != '${FOOD_TRUCK_TERMINAL_ID}' THEN orig_amount ELSE 0 END), 2) as shop_revenue,
+            COUNT(CASE WHEN terminal_id = '${FOOD_TRUCK_TERMINAL_ID}' THEN 1 END) as food_truck_txns,
+            COUNT(CASE WHEN terminal_id IS NULL OR terminal_id != '${FOOD_TRUCK_TERMINAL_ID}' THEN 1 END) as shop_txns
+          FROM transactions
+          WHERE type = 'SALE' AND status = 'AUTHORISED'
+          GROUP BY created_at_date
+          ORDER BY created_at_date DESC
+          LIMIT ?
+        `).all(days);
+        return json(rows.reverse());
+      }
+
+      // GET /api/stats/monthly-by-source
+      if (url.pathname === '/api/stats/monthly-by-source') {
+        const rows = db.prepare(`
+          SELECT
+            strftime('%Y-%m', created_at_utc) as month,
+            ROUND(SUM(CASE WHEN terminal_id = '${FOOD_TRUCK_TERMINAL_ID}' THEN orig_amount ELSE 0 END), 2) as food_truck_revenue,
+            ROUND(SUM(CASE WHEN terminal_id IS NULL OR terminal_id != '${FOOD_TRUCK_TERMINAL_ID}' THEN orig_amount ELSE 0 END), 2) as shop_revenue,
+            COUNT(CASE WHEN terminal_id = '${FOOD_TRUCK_TERMINAL_ID}' THEN 1 END) as food_truck_txns,
+            COUNT(CASE WHEN terminal_id IS NULL OR terminal_id != '${FOOD_TRUCK_TERMINAL_ID}' THEN 1 END) as shop_txns
+          FROM transactions
+          WHERE type = 'SALE' AND status = 'AUTHORISED'
+          GROUP BY month
+          ORDER BY month ASC
+        `).all();
+        return json(rows);
       }
 
       // POST /api/sync
@@ -284,9 +338,25 @@ Bun.serve({
         return json(rows);
       }
 
-      // GET /api/instagram/post-impact?days=7
+      // GET /api/instagram/post-impact?days=7&limit=20&offset=0&sort=post_date&dir=desc&media_type=
       if (url.pathname === '/api/instagram/post-impact') {
         const windowDays = parseInt(url.searchParams.get('days') ?? '7');
+        const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '20'), 50);
+        const offset = parseInt(url.searchParams.get('offset') ?? '0');
+        const mediaType = url.searchParams.get('media_type');
+        const sortField = url.searchParams.get('sort') ?? 'post_date';
+        const sortDir = url.searchParams.get('dir') ?? 'desc';
+
+        const allowedSort = ['post_date', 'uplift', 'uplift_pct', 'likes', 'reach', 'sales_before', 'sales_after'];
+        const sf = allowedSort.includes(sortField) ? sortField : 'post_date';
+        const sd = sortDir === 'asc' ? 'ASC' : 'DESC';
+        const mtClause = mediaType ? ` AND m.media_type = '${mediaType.replace(/'/g, "''")}'` : '';
+
+        const countRow = db.prepare(`
+          SELECT COUNT(*) as total FROM instagram_media m
+          WHERE 1=1${mtClause}
+        `).get() as { total: number };
+
         const rows = db.prepare(`
           WITH post_sales AS (
             SELECT
@@ -300,14 +370,12 @@ Bun.serve({
               mm.saved,
               mm.shares,
               mm.comments,
-              -- Sales in window BEFORE post
               (
                 SELECT ROUND(SUM(curr_amount), 2) FROM transactions
                 WHERE type='SALE' AND status='AUTHORISED'
                   AND created_at_date >= date(m.timestamp_local_date, '-' || ? || ' days')
                   AND created_at_date < m.timestamp_local_date
               ) AS sales_before,
-              -- Sales in window AFTER post
               (
                 SELECT ROUND(SUM(curr_amount), 2) FROM transactions
                 WHERE type='SALE' AND status='AUTHORISED'
@@ -324,6 +392,7 @@ Bun.serve({
                 SUM(CASE WHEN metric_name='comments' THEN metric_value END) as comments
               FROM instagram_media_metrics GROUP BY media_id
             ) mm ON m.media_id = mm.media_id
+            WHERE 1=1${mtClause}
           )
           SELECT *,
             ROUND(COALESCE(sales_after, 0) - COALESCE(sales_before, 0), 2) AS uplift,
@@ -332,10 +401,10 @@ Bun.serve({
               ELSE NULL
             END AS uplift_pct
           FROM post_sales
-          ORDER BY post_date DESC
-          LIMIT 50
-        `).all(windowDays, windowDays);
-        return json(rows);
+          ORDER BY ${sf} ${sd}
+          LIMIT ? OFFSET ?
+        `).all(windowDays, windowDays, limit, offset);
+        return json({ rows, total: countRow.total });
       }
 
       // GET /api/instagram/content-type-roi
